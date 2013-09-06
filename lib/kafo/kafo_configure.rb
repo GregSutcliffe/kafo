@@ -96,7 +96,8 @@ class KafoConfigure < Clamp::Command
                     :manifest_error => 22,
                     :no_answer_file => 23,
                     :unknown_module => 24,
-                    :defaults_error => 25 }
+                    :defaults_error => 25,
+                    :wrong_hostname => 26}
     if error_codes.has_key? code
       return error_codes[code]
     else
@@ -230,17 +231,23 @@ class KafoConfigure < Clamp::Command
   end
 
   def set_env
+    hostname = `hostname -f`.chomp
+
     # Use handy gem trick to compare versions
-    unless Gem::Version.new(Facter.version) >= Gem::Version.new('1.7')
+    if Gem::Version.new(Facter.version) < Gem::Version.new('1.7') && Facter.fqdn != hostname
       # Facter 1.6 tries to determine FQDN from /etc/resolv.conf and we do NOT want this behavior
-      fqdn_exit("'facter fqdn' does not match 'hostname -f'") unless Facter.fqdn == `hostname -f`.chomp
+      fqdn_exit("'facter fqdn' does not match 'hostname -f'")
     end
-    fqdn_exit("Invalid FQDN: #{Facter.fqdn}, check your hostname") unless Facter.fqdn.include?('.')
+
+    # Every FQDN should have at least one dot
+    unless Facter.fqdn.include?('.')
+      fqdn_exit("Invalid FQDN: #{Facter.fqdn}, check your hostname")
+    end
   end
 
   def fqdn_exit(message)
-    puts message
-    exit(:invalid_system)
+    logger.error message
+    exit(:wrong_hostname)
   end
 
   def config_file
